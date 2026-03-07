@@ -1,0 +1,6 @@
+freshimages/
+train/
+valid/
+__pycache__/
+*.pyc
+venv/
