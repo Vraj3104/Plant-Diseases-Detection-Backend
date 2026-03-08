@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: plant-disease-api          # change this name if you want
+    env: python
+    plan: free                       # start with free, upgrade later if slow
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    # optional but recommended:
+    healthCheckPath: /docs           # or /health if you add a simple health endpoint
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11                # or 3.10 / 3.12 depending on your torch version
