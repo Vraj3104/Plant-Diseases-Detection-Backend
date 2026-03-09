@@ -3,7 +3,7 @@ services:
     name: plant-disease-api
     env: python
     plan: free
-    region: oregon                   # or your region
+    region: oregon
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     autoDeploy: true
@@ -13,15 +13,12 @@ services:
         value: "1"
       - key: TORCH_HOME
         value: "/opt/render/project/.torch"
-      - key: LOG_LEVEL
-        value: "INFO"
       - key: MODEL_PATH
         value: "saved_model/plant_disease_model.pth"
       - key: REQUIRE_API_KEY
         value: "true"
       - key: API_KEY_HEADER_NAME
         value: "x-api-key"
-      # It is safer to set API_KEY in the Render Dashboard as a Secret,
-      # but you can put a placeholder here if you want:
+      # Prefer setting API_KEY in the UI (secret). If you insist, uncomment next 2 lines:
       # - key: API_KEY
       #   value: "REPLACE_ME_IN_DASHBOARD"
