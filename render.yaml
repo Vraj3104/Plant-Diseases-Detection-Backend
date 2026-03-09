@@ -9,6 +9,8 @@ services:
     autoDeploy: true
     healthCheckPath: /health
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.8"           # <-- must be major.minor.patch
       - key: PYTHONUNBUFFERED
         value: "1"
       - key: TORCH_HOME
@@ -19,6 +21,4 @@ services:
         value: "true"
       - key: API_KEY_HEADER_NAME
         value: "x-api-key"
-      # Prefer setting API_KEY in the UI (secret). If you insist, uncomment next 2 lines:
-      # - key: API_KEY
-      #   value: "REPLACE_ME_IN_DASHBOARD"
+      # Do NOT put the actual API_KEY here in git; set it in the Render UI
