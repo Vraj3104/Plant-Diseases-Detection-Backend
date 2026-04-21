@@ -320,85 +320,166 @@
 
 
 # backend/main.py
+# from fastapi import FastAPI, File, UploadFile, HTTPException
+# from fastapi.middleware.cors import CORSMiddleware
+# from fastapi.responses import JSONResponse
+# from PIL import Image
+# import os
+# import io
+# import torch
+# import torch.nn.functional as F
+
+# from .model import load_model, get_transform
+
+# app = FastAPI(title="Plant Disease API", version="1.3 (public)")
+
+# # -----------------------------
+# # CORS
+# # -----------------------------
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],   # TODO: restrict to your app domains in production
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+# # -----------------------------
+# # Model load (relative path so it works on Render)
+# # -----------------------------
+# MODEL_PATH = os.getenv("MODEL_PATH", "saved_model/plant_disease_model.pth")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# @app.on_event("startup")
+# async def startup_event():
+#     app.state.model, app.state.class_names = load_model(MODEL_PATH, device)
+#     app.state.transform = get_transform()
+
+# # -----------------------------
+# # Health
+# # -----------------------------
+# @app.get("/health")
+# def health():
+#     return {"status": "ok"}
+
+# # -----------------------------
+# # Predict  (UNPROTECTED: no API key)
+# # -----------------------------
+# @app.post("/predict")
+# async def predict(file: UploadFile = File(...)):
+#     # Validate content-type quickly (helps avoid bad uploads)
+#     if not (file.content_type or "").lower().startswith("image/"):
+#         raise HTTPException(status_code=400, detail="Please upload an image file")
+
+#     # Read and parse image
+#     try:
+#         contents = await file.read()
+#         image = Image.open(io.BytesIO(contents)).convert("RGB")
+#     except Exception:
+#         raise HTTPException(status_code=400, detail="Invalid image file")
+
+#     # Preprocess & infer
+#     image_t = app.state.transform(image).unsqueeze(0).to(device)
+#     with torch.no_grad():
+#         output = app.state.model(image_t)
+#         _, pred = torch.max(output, 1)
+#         confidence = torch.max(F.softmax(output, dim=1)).item()
+
+#     # Post-process label
+#     label = app.state.class_names[pred.item()]
+#     parts = label.split("___")
+#     crop = parts[0]
+#     disease = parts[1] if len(parts) > 1 else label
+#     status = "Healthy" if "healthy" in disease.lower() else "Diseased"
+
+#     # Farmer-friendly message
+#     message = f"crop: {crop}\nstatus: {status}\ndisease: {disease}"
+
+#     return JSONResponse({
+#         "crop": crop,
+#         "status": status,
+#         "disease": disease,
+#         "confidence": round(confidence * 100, 2),
+#         "message": message
+#     })
+
+
+
+
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from PIL import Image
-import os
-import io
 import torch
 import torch.nn.functional as F
+import io
 
 from .model import load_model, get_transform
 
-app = FastAPI(title="Plant Disease API", version="1.3 (public)")
+# ---------------------------------
+# App
+# ---------------------------------
+app = FastAPI(
+    title="Plant Disease Detection API",
+    version="1.0",
+)
 
-# -----------------------------
-# CORS
-# -----------------------------
+# ---------------------------------
+# CORS (Flutter-friendly)
+# ---------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # TODO: restrict to your app domains in production
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# -----------------------------
-# Model load (relative path so it works on Render)
-# -----------------------------
-MODEL_PATH = os.getenv("MODEL_PATH", "saved_model/plant_disease_model.pth")
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# ---------------------------------
+# Load model ONCE (critical for speed)
+# ---------------------------------
+MODEL_PATH = "saved_model/plant_disease_model.pth"
+device = torch.device("cpu")  # Render Free = CPU only
 
 @app.on_event("startup")
-async def startup_event():
+def startup_event():
     app.state.model, app.state.class_names = load_model(MODEL_PATH, device)
     app.state.transform = get_transform()
 
-# -----------------------------
-# Health
-# -----------------------------
+# ---------------------------------
+# Health check
+# ---------------------------------
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-# -----------------------------
-# Predict  (UNPROTECTED: no API key)
-# -----------------------------
+# ---------------------------------
+# Predict (IMAGE ONLY, NO AUTH)
+# ---------------------------------
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    # Validate content-type quickly (helps avoid bad uploads)
-    if not (file.content_type or "").lower().startswith("image/"):
-        raise HTTPException(status_code=400, detail="Please upload an image file")
 
-    # Read and parse image
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image files are allowed")
+
     try:
         contents = await file.read()
         image = Image.open(io.BytesIO(contents)).convert("RGB")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid image file")
+    except:
+        raise HTTPException(status_code=400, detail="Invalid image")
 
-    # Preprocess & infer
-    image_t = app.state.transform(image).unsqueeze(0).to(device)
+    image_tensor = app.state.transform(image).unsqueeze(0)
+
     with torch.no_grad():
-        output = app.state.model(image_t)
-        _, pred = torch.max(output, 1)
-        confidence = torch.max(F.softmax(output, dim=1)).item()
+        outputs = app.state.model(image_tensor)
+        probs = F.softmax(outputs, dim=1)
+        confidence, predicted = torch.max(probs, 1)
 
-    # Post-process label
-    label = app.state.class_names[pred.item()]
-    parts = label.split("___")
-    crop = parts[0]
-    disease = parts[1] if len(parts) > 1 else label
-    status = "Healthy" if "healthy" in disease.lower() else "Diseased"
-
-    # Farmer-friendly message
-    message = f"crop: {crop}\nstatus: {status}\ndisease: {disease}"
+    label = app.state.class_names[predicted.item()]
+    crop, disease = label.split("___")
 
     return JSONResponse({
         "crop": crop,
-        "status": status,
         "disease": disease,
-        "confidence": round(confidence * 100, 2),
-        "message": message
+        "status": "Healthy" if "healthy" in disease.lower() else "Diseased",
+        "confidence": round(confidence.item() * 100, 2),
     })
